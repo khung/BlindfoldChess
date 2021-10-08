@@ -5,8 +5,8 @@ import QtQuick.Layouts 1.11
 ApplicationWindow {
     id: appWindow
     visible: true
-    minimumWidth: 640
-    minimumHeight: 480
+    minimumWidth: 800
+    minimumHeight: 600
     title: "Blindfold Chess"
 
     menuBar: MenuBar {
@@ -37,8 +37,7 @@ ApplicationWindow {
         Image {
             id: boardImage
             Layout.alignment: Qt.AlignHCenter
-            source: "assets/chessboard.png"
-            state: "hidden"
+            state: "visible"
 
             states: [
                 State {
@@ -72,7 +71,19 @@ ApplicationWindow {
 
             TextField {
                 id: moveTextField
+                onAccepted: {
+                    backend.push_move(moveTextField.text);
+                    moveTextField.clear();
+                }
             }
+        }
+    }
+
+    // Connect to Qt signals in Python
+    Connections {
+        target: backend
+        function onBoardChanged(board) {
+            boardImage.source = board;
         }
     }
 }
