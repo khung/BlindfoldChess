@@ -13,9 +13,12 @@ ApplicationWindow {
         Menu {
             title: "&File"
             Action { text: "&New Game" }
-            Action { text: "&Import Game" }
+            Action { text: "&Open Game..." }
+            Action { text: "&Import FEN" }
             MenuSeparator { }
-            Action { text: "&Quit" }
+            Action { text: "&Save" }
+            MenuSeparator { }
+            Action { text: "E&xit" }
         }
         Menu {
             title: "&Edit"
