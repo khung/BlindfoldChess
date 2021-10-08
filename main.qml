@@ -72,18 +72,30 @@ ApplicationWindow {
             TextField {
                 id: moveTextField
                 onAccepted: {
-                    backend.push_move(moveTextField.text);
+                    backend.push_player_move(moveTextField.text);
                     moveTextField.clear();
                 }
             }
         }
     }
 
-    // Connect to Qt signals in Python
+    // Connect to signal for updating the board
     Connections {
         target: backend
         function onBoardChanged(board) {
             boardImage.source = board;
+        }
+    }
+    Connections {
+        target: backend
+        function onPlayerTurn() {
+            moveTextField.enabled = true;
+        }
+    }
+    Connections {
+        target: backend
+        function onEngineTurn() {
+            moveTextField.enabled = false;
         }
     }
 }
