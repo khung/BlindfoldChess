@@ -49,6 +49,12 @@ ApplicationWindow {
                     PropertyChanges { target: boardImage; opacity: 100 }
                 }
             ]
+
+            BusyIndicator {
+                id: busyIndicator
+                anchors.centerIn: parent
+                running: false
+            }
         }
 
         Button {
@@ -90,12 +96,14 @@ ApplicationWindow {
         target: backend
         function onPlayerTurn() {
             moveTextField.enabled = true;
+            busyIndicator.running = false;
         }
     }
     Connections {
         target: backend
         function onEngineTurn() {
             moveTextField.enabled = false;
+            busyIndicator.running = true;
         }
     }
 }
