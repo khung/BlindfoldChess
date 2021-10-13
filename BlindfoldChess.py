@@ -166,10 +166,38 @@ class Backend(QObject):
     def _update_board_status(self) -> None:
         outcome = self._board.outcome()
         if outcome is not None:
-            print("outcome: " + outcome.termination.name)
-            self.gameOver.emit(outcome.termination.name)
+            self.gameOver.emit(self._get_outcome_message(outcome))
         elif self._board.is_check():
             print("in check")
+
+    @staticmethod
+    def _get_outcome_message(outcome: chess.Outcome) -> str:
+        if outcome is None:
+            outcome_message = "Game in progress."
+        else:
+            if outcome.termination is chess.Termination.CHECKMATE:
+                if outcome.winner:
+                    outcome_message = "White has won by "
+                else:
+                    outcome_message = "Black has won by "
+                outcome_message += "checkmate."
+            elif outcome.termination is chess.Termination.STALEMATE:
+                outcome_message = "The game has ended in a draw due to a stalemate."
+            elif outcome.termination is chess.Termination.INSUFFICIENT_MATERIAL:
+                outcome_message = "The game has ended in a draw due to insufficient material."
+            elif outcome.termination is chess.Termination.SEVENTYFIVE_MOVES:
+                outcome_message = "The game has ended in a draw due to the seventy-five-move rule."
+            elif outcome.termination is chess.Termination.FIVEFOLD_REPETITION:
+                outcome_message = "The game has ended in a draw due to the fivefold repetition rule."
+            elif outcome.termination is chess.Termination.FIFTY_MOVES:
+                # Not required to draw
+                outcome_message = "The game has ended in a draw due to the fifty-move rule."
+            elif outcome.termination is chess.Termination.THREEFOLD_REPETITION:
+                # Not required to draw
+                outcome_message = "The game has ended in a draw due to the threefold repetition rule."
+            else:
+                raise ValueError(f"{outcome.termination.name} case not handled!")
+        return outcome_message
 
     @pyqtSlot()
     def handle_exit(self) -> None:
@@ -232,25 +260,35 @@ class Backend(QObject):
         self.undoEnabled.emit(False)
         # Use a new game ID
         self._game_id += 1
+        # Change to player's turn
+        self.playerTurn.emit()
 
     @pyqtSlot()
     def undo_move(self) -> None:
-        """Undo the player's last move. Assumes that it is the player's turn as there is no well-define way to stop a
-        running engine."""
-        # Remove engine's move
-        self._board.pop()
+        """Undo the player's last move."""
+        if self._board.turn == self.player_side:
+            # Remove engine's move
+            self._board.pop()
         # Remove player's move
         self._board.pop()
         # Update board display
         self.draw_current_board()
         # Check if we can still undo
         self.undoEnabled.emit(self.can_undo_move())
+        # Ensure that it's the player's turn
+        self.playerTurn.emit()
 
     def can_undo_move(self) -> bool:
         """Checks whether the player can undo moves."""
-        # Can only undo if there's been more than 2 moves. Don't use fullmove_number as that can be changed when a FEN
+        # Can only undo if there a player move to undo. Don't use fullmove_number as that can be changed when a FEN
         # is loaded.
-        return len(self._board.move_stack) > 2
+        if self._board.turn == self.player_side:
+            # 2 or more half-moves on stack
+            can_undo = len(self._board.move_stack) > 1
+        else:
+            # 3 or more half-moves on stack
+            can_undo = len(self._board.move_stack) > 2
+        return can_undo
 
     @pyqtSlot()
     def save_game(self) -> None:
@@ -274,6 +312,8 @@ class Backend(QObject):
             self.draw_current_board()
             # Check if we can still undo
             self.undoEnabled.emit(self.can_undo_move())
+            # Change to player's turn
+            self.playerTurn.emit()
 
 
 if __name__ == '__main__':

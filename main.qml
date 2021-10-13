@@ -134,6 +134,11 @@ ApplicationWindow {
         icon: StandardIcon.Critical
     }
 
+    MessageDialog {
+        id: outcomeMessageDialog
+        title: "Outcome"
+    }
+
     // Connect to signal for updating the board.
     Connections {
         target: backend
@@ -156,7 +161,7 @@ ApplicationWindow {
     Connections {
         target: backend
         function onEngineTurn() {
-            // Diable menu items
+            // Disable menu items
             newAction.enabled = false;
             loadAction.enabled = false;
             saveAction.enabled = false;
@@ -183,6 +188,21 @@ ApplicationWindow {
         target: backend
         function onUndoEnabled(enabled) {
             undoAction.enabled = enabled
+        }
+    }
+    Connections {
+        target: backend
+        function onGameOver(message) {
+            // Set widget states for a terminated game
+            newAction.enabled = true;
+            loadAction.enabled = true;
+            // Don't save finished games
+            saveAction.enabled = false;
+            moveTextField.enabled = false;
+            busyIndicator.running = false;
+
+            outcomeMessageDialog.text = message;
+            outcomeMessageDialog.open();
         }
     }
 }
