@@ -1,9 +1,10 @@
 import sys
 from typing import Callable
+import configparser
 
 from PyQt5.QtGui import QGuiApplication
 from PyQt5.QtQml import QQmlApplicationEngine
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QRunnable, QThreadPool
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QRunnable, QThreadPool, QVariant
 import chess
 import chess.engine
 import chess.svg
@@ -54,6 +55,10 @@ class Backend(QObject):
     push_player_move
     draw_current_board
     handle_exit
+    is_engine_initialized
+    initialize_engine
+    save_options
+    set_option_values
 
     Instance variables
     ------------------
@@ -61,12 +66,20 @@ class Backend(QObject):
     engine_time_limit
     """
 
-    # Qt signal to indicate that the board has changed
+    # Qt signals
+    # Indicate that the board has changed
     boardChanged = pyqtSignal(str)
-    # Qt signals to indicate whose turn it is
+    # Indicate that the options have changed
+    optionsChanged = pyqtSignal(QVariant)
+    # Indicate whose turn it is
     playerTurn = pyqtSignal()
     engineTurn = pyqtSignal()
+    # Indicate whether the game is over
     gameOver = pyqtSignal(str)
+    # Indicate that an error has occurred
+    error = pyqtSignal(str)
+
+    config_file = "options.cfg"
 
     def __init__(self) -> None:
         super().__init__()
@@ -74,16 +87,19 @@ class Backend(QObject):
         self.engineTurn.connect(self.engine_play)
         self.player_side = chess.WHITE
         self._board = chess.Board()
-        engine_path = r"C:\Users\Kevin Hung\Documents\stockfish_13_win_x64_bmi2.exe"
-        # Use the synchronous wrapper instead of the coroutines to avoid having to deal with an asyncio event loop in
-        # Qt.
-        self._engine = chess.engine.SimpleEngine.popen_uci(engine_path)
+        self.config = configparser.ConfigParser()
+        # ConfigParser instance will be empty if the file doesn't exist
+        self.config.read([self.config_file])
+        self._engine = None
+        self.initialize_engine()
         self.engine_time_limit = 10.0
         self._thread_pool = QThreadPool()
 
     @pyqtSlot()
     def engine_play(self) -> None:
         """Have the engine think about and make its move."""
+        if not self.is_engine_initialized():
+            return
         worker = Worker(self._get_engine_move)
         worker.signals.result.connect(self._push_engine_move)
         self._thread_pool.start(worker)
@@ -95,6 +111,8 @@ class Backend(QObject):
 
         :param move: The chess move in Standard Algebraic Notation.
         """
+        if not self.is_engine_initialized():
+            return
         try:
             self._board.push_san(move)
         except ValueError:
@@ -144,7 +162,53 @@ class Backend(QObject):
     @pyqtSlot()
     def handle_exit(self) -> None:
         """Clean up by stopping the engine. Connect to QGuiApplication.aboutToQuit signal to handle exits correctly."""
-        self._engine.quit()
+        if self._engine:
+            self._engine.quit()
+
+    def is_engine_initialized(self) -> bool:
+        """Check whether the engine has been initialized."""
+        if self._engine is None:
+            self.error.emit("Engine path is not valid. Please check the value in the options.")
+            return False
+        return True
+
+    def initialize_engine(self) -> None:
+        """Initialize the chess engine. If an instance already exists, stop it first."""
+        if self._engine:
+            self._engine.quit()
+        self._engine = None
+        if self.config.has_option('OPTIONS', 'EnginePath'):
+            try:
+                # Use the synchronous wrapper instead of the coroutines to avoid having to deal with an asyncio event
+                # loop in Qt.
+                self._engine = chess.engine.SimpleEngine.popen_uci(self.config['OPTIONS'].get('EnginePath'))
+            except FileNotFoundError:
+                # Silently fail
+                pass
+
+    @pyqtSlot(QVariant)
+    def save_options(self, options: QVariant) -> None:
+        """
+        Save current options to the configuration file.
+
+        :param options: A dictionary of the options.
+        """
+        # Convert to Python dict
+        options_dict = options.toVariant()
+        if not self.config.has_section('OPTIONS'):
+            self.config.add_section('OPTIONS')
+        self.config.set('OPTIONS', 'EnginePath', options_dict['enginePath'])
+        with open(self.config_file, 'w') as f:
+            self.config.write(f)
+        self.initialize_engine()
+
+    def set_option_values(self) -> None:
+        """Populate the initial dialog values for the options."""
+        engine_path = ""
+        if self.config.has_section('OPTIONS'):
+            engine_path = self.config['OPTIONS'].get('EnginePath', "")
+        options_dict = {'enginePath': engine_path}
+        self.optionsChanged.emit(options_dict)
 
 
 if __name__ == '__main__':
@@ -157,6 +221,7 @@ if __name__ == '__main__':
     engine.load('main.qml')
     # We need to draw this outside the initialization so the signals can be connected to the slots first.
     backend.draw_current_board()
+    backend.set_option_values()
     engine.quit.connect(app.quit)
     # Need to connect to app instead of to engine for the slot to work
     app.aboutToQuit.connect(backend.handle_exit)

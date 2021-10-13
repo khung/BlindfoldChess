@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.11
+import QtQuick.Dialogs 1.3
 
 ApplicationWindow {
     id: appWindow
@@ -26,7 +27,10 @@ ApplicationWindow {
         }
         Menu {
             title: "&Settings"
-            Action { text: "&Options" }
+            Action {
+                text: "&Options"
+                onTriggered: optionsDialog.open()
+            }
         }
     }
 
@@ -85,6 +89,32 @@ ApplicationWindow {
         }
     }
 
+    Dialog {
+        id: optionsDialog
+        title: "Options"
+        GridLayout {
+            columns: 2
+            Label { text: "Engine Path" }
+            TextField {
+                id: enginePathField;
+                Layout.fillWidth: true;
+            }
+        }
+        standardButtons: Dialog.Save | Dialog.Cancel
+        onAccepted: {
+            var options = {
+                'enginePath': enginePathField.text
+            };
+            backend.save_options(options)
+        }
+    }
+
+    MessageDialog {
+        id: errorMessageDialog
+        title: "Error"
+        icon: StandardIcon.Critical
+    }
+
     // Connect to signal for updating the board
     Connections {
         target: backend
@@ -104,6 +134,19 @@ ApplicationWindow {
         function onEngineTurn() {
             moveTextField.enabled = false;
             busyIndicator.running = true;
+        }
+    }
+    Connections {
+        target: backend
+        function onError(message) {
+            errorMessageDialog.text = message;
+            errorMessageDialog.open();
+        }
+    }
+    Connections {
+        target: backend
+        function onOptionsChanged(options) {
+            enginePathField.text = options['enginePath']
         }
     }
 }
