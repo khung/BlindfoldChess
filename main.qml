@@ -13,17 +13,36 @@ ApplicationWindow {
     menuBar: MenuBar {
         Menu {
             title: "&File"
-            Action { text: "&New Game" }
-            Action { text: "&Open Game..." }
-            Action { text: "&Import FEN" }
+            Action {
+                id: newAction
+                text: "&New Game"
+                onTriggered: backend.reset_game()
+            }
+            Action {
+                id: loadAction
+                text: "&Open Game"
+                onTriggered: backend.load_game()
+            }
             MenuSeparator { }
-            Action { text: "&Save" }
+            Action {
+                id: saveAction
+                text: "&Save"
+                onTriggered: backend.save_game()
+            }
             MenuSeparator { }
-            Action { text: "E&xit" }
+            Action {
+                text: "E&xit"
+                onTriggered: Qt.quit()
+            }
         }
         Menu {
             title: "&Edit"
-            Action { text: "&Undo Move" }
+            Action {
+                id: undoAction
+                text: "&Undo Move"
+                enabled: false
+                onTriggered: backend.undo_move()
+            }
         }
         Menu {
             title: "&Settings"
@@ -125,6 +144,11 @@ ApplicationWindow {
     Connections {
         target: backend
         function onPlayerTurn() {
+            // Enable menu items
+            newAction.enabled = true;
+            loadAction.enabled = true;
+            saveAction.enabled = true;
+
             moveTextField.enabled = true;
             busyIndicator.running = false;
         }
@@ -132,6 +156,11 @@ ApplicationWindow {
     Connections {
         target: backend
         function onEngineTurn() {
+            // Diable menu items
+            newAction.enabled = false;
+            loadAction.enabled = false;
+            saveAction.enabled = false;
+
             moveTextField.enabled = false;
             busyIndicator.running = true;
         }
@@ -148,6 +177,12 @@ ApplicationWindow {
         target: backend
         function onOptionsChanged(options) {
             enginePathField.text = options['enginePath']
+        }
+    }
+    Connections {
+        target: backend
+        function onUndoEnabled(enabled) {
+            undoAction.enabled = enabled
         }
     }
 }

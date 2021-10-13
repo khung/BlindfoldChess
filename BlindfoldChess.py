@@ -59,10 +59,16 @@ class Backend(QObject):
     initialize_engine
     save_options
     set_option_values
+    reset_game
+    undo_move
+    can_undo_move
+    save_game
+    load_game
 
     Instance variables
     ------------------
     player_side
+    config
     engine_time_limit
     """
 
@@ -78,8 +84,11 @@ class Backend(QObject):
     gameOver = pyqtSignal(str)
     # Indicate that an error has occurred
     error = pyqtSignal(str)
+    # Indicate whether moves can be undone
+    undoEnabled = pyqtSignal(bool)
 
     config_file = "options.cfg"
+    save_file = "save.fen"
 
     def __init__(self) -> None:
         super().__init__()
@@ -94,6 +103,8 @@ class Backend(QObject):
         self.initialize_engine()
         self.engine_time_limit = 10.0
         self._thread_pool = QThreadPool()
+        # Keep track of the current game's ID so that the engine will know whether it's the same game as before.
+        self._game_id = 1
 
     @pyqtSlot()
     def engine_play(self) -> None:
@@ -125,7 +136,7 @@ class Backend(QObject):
             self.engineTurn.emit()
 
     def _get_engine_move(self) -> chess.Move:
-        result = self._engine.play(self._board, chess.engine.Limit(time=self.engine_time_limit))
+        result = self._engine.play(self._board, chess.engine.Limit(time=self.engine_time_limit), game=self._game_id)
         return result.move
 
     @pyqtSlot(object)
@@ -139,6 +150,7 @@ class Backend(QObject):
         self._board.push(move)
         self.draw_current_board()
         self._update_board_status()
+        self.undoEnabled.emit(self.can_undo_move())
         # Only continue game if it is not terminated
         if self._board.outcome() is None:
             self.playerTurn.emit()
@@ -209,6 +221,59 @@ class Backend(QObject):
             engine_path = self.config['OPTIONS'].get('EnginePath', "")
         options_dict = {'enginePath': engine_path}
         self.optionsChanged.emit(options_dict)
+
+    @pyqtSlot()
+    def reset_game(self) -> None:
+        """Reset the game. Assumes that it is the player's turn as there is no well-define way to stop a running
+        engine."""
+        self._board.reset()
+        self.draw_current_board()
+        # Reset undo
+        self.undoEnabled.emit(False)
+        # Use a new game ID
+        self._game_id += 1
+
+    @pyqtSlot()
+    def undo_move(self) -> None:
+        """Undo the player's last move. Assumes that it is the player's turn as there is no well-define way to stop a
+        running engine."""
+        # Remove engine's move
+        self._board.pop()
+        # Remove player's move
+        self._board.pop()
+        # Update board display
+        self.draw_current_board()
+        # Check if we can still undo
+        self.undoEnabled.emit(self.can_undo_move())
+
+    def can_undo_move(self) -> bool:
+        """Checks whether the player can undo moves."""
+        # Can only undo if there's been more than 2 moves. Don't use fullmove_number as that can be changed when a FEN
+        # is loaded.
+        return len(self._board.move_stack) > 2
+
+    @pyqtSlot()
+    def save_game(self) -> None:
+        """Save the game as a FEN to a file."""
+        with open(self.save_file, 'w') as f:
+            f.write(self._board.fen())
+
+    @pyqtSlot()
+    def load_game(self) -> None:
+        """Load the game from a file containing a FEN."""
+        board_set = False
+        try:
+            with open(self.save_file) as f:
+                self._board.set_fen(f.readline())
+            board_set = True
+        except FileNotFoundError:
+            self.error.emit("No save file found.")
+        if board_set:
+            # Use a new game ID
+            self._game_id += 1
+            self.draw_current_board()
+            # Check if we can still undo
+            self.undoEnabled.emit(self.can_undo_move())
 
 
 if __name__ == '__main__':
