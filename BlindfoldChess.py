@@ -250,8 +250,8 @@ class Backend(QObject):
         options_dict = {'enginePath': engine_path}
         self.optionsChanged.emit(options_dict)
 
-    @pyqtSlot()
-    def reset_game(self) -> None:
+    @pyqtSlot(str)
+    def reset_game(self, player_side: str) -> None:
         """Reset the game. Assumes that it is the player's turn as there is no well-define way to stop a running
         engine."""
         self._board.reset()
@@ -260,8 +260,14 @@ class Backend(QObject):
         self.undoEnabled.emit(False)
         # Use a new game ID
         self._game_id += 1
-        # Change to player's turn
-        self.playerTurn.emit()
+        if player_side == 'White':
+            # Set to player's turn
+            self.player_side = chess.WHITE
+            self.playerTurn.emit()
+        else:
+            # Set to engine's turn
+            self.player_side = chess.BLACK
+            self.engineTurn.emit()
 
     @pyqtSlot()
     def undo_move(self) -> None:

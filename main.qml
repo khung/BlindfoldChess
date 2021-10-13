@@ -16,7 +16,7 @@ ApplicationWindow {
             Action {
                 id: newAction
                 text: "&New Game"
-                onTriggered: backend.reset_game()
+                onTriggered: newDialog.open()
             }
             Action {
                 id: loadAction
@@ -27,6 +27,7 @@ ApplicationWindow {
             Action {
                 id: saveAction
                 text: "&Save"
+                enabled: false
                 onTriggered: backend.save_game()
             }
             MenuSeparator { }
@@ -100,11 +101,52 @@ ApplicationWindow {
 
             TextField {
                 id: moveTextField
+                enabled: false
                 onAccepted: {
                     backend.push_player_move(moveTextField.text);
                     moveTextField.clear();
                 }
             }
+        }
+    }
+
+    Dialog {
+        id: newDialog
+        title: "New Game"
+        // Show on application start (don't set immediately as it will not position correctly)
+        Component.onCompleted: newDialog.visible = true
+
+        ButtonGroup {
+            id: playerSideButtonGroup
+            buttons: playerSideRow.children
+        }
+
+        GridLayout {
+            columns: 2
+            Label { text: "Player Side:" }
+            Row {
+                id: playerSideRow
+
+                RadioButton { text: "White";  }
+                RadioButton { text: "Black" }
+            }
+        }
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onActionChosen: {
+            if (action.button === Dialog.Ok) {
+                // If no side was chosen, don't accept.
+                if (playerSideButtonGroup.checkedButton === null) {
+                    action.accepted = false;
+                }
+            }
+        }
+        onAccepted: {
+            backend.reset_game(playerSideButtonGroup.checkedButton.text);
+            playerSideButtonGroup.checkState = Qt.Unchecked;
+        }
+        onRejected: {
+            // Make sure the state is cleared for the next time
+            playerSideButtonGroup.checkState = Qt.Unchecked;
         }
     }
 
