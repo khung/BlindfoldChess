@@ -105,7 +105,7 @@ ApplicationWindow {
             var options = {
                 'enginePath': enginePathField.text
             };
-            backend.save_options(options)
+            backend.save_options(options);
         }
     }
 
@@ -115,7 +115,7 @@ ApplicationWindow {
         icon: StandardIcon.Critical
     }
 
-    // Connect to signal for updating the board
+    // Connect to signal for updating the board.
     Connections {
         target: backend
         function onBoardChanged(board) {
@@ -143,6 +143,7 @@ ApplicationWindow {
             errorMessageDialog.open();
         }
     }
+    // Connect to signal that indicates the options have changed.
     Connections {
         target: backend
         function onOptionsChanged(options) {
