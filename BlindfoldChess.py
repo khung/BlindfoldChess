@@ -244,6 +244,7 @@ class Backend(QObject):
             self.config.write(f)
         self.initialize_engine()
 
+    @pyqtSlot()
     def set_option_values(self) -> None:
         """Populate the initial dialog values for the options."""
         options_dict = {

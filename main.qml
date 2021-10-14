@@ -49,7 +49,11 @@ ApplicationWindow {
             title: "&Settings"
             Action {
                 text: "&Options"
-                onTriggered: optionsDialog.open()
+                onTriggered: {
+                    // Reset the options to the saved values to clear any unsaved changes
+                    backend.set_option_values();
+                    optionsDialog.open();
+                }
             }
         }
     }
