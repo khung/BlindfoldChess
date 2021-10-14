@@ -321,6 +321,8 @@ class Backend(QObject):
             self.draw_current_board()
             # Check if we can still undo
             self.undoEnabled.emit(self.can_undo_move())
+            # Set the player to be the correct color
+            self.player_side = self._board.turn
             # Change to player's turn
             self.playerTurn.emit()
 
