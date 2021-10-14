@@ -127,8 +127,8 @@ ApplicationWindow {
 
         GridLayout {
             columns: 2
-            Label { text: "Player Side:" }
-            Row {
+            Label { text: "Player side:" }
+            RowLayout {
                 id: playerSideRow
 
                 RadioButton { text: "White";  }
