@@ -155,16 +155,26 @@ ApplicationWindow {
         title: "Options"
         GridLayout {
             columns: 2
+            // EnginePath
             Label { text: "Engine Path" }
             TextField {
                 id: enginePathField;
                 Layout.fillWidth: true;
             }
+            // EngineSearchDepth
+            Label { text: "Engine Search Depth" }
+            SpinBox {
+                id: engineSearchDepthSpinBox;
+                Layout.fillWidth: true;
+                from: 5
+                to: 30
+            }
         }
         standardButtons: Dialog.Save | Dialog.Cancel
         onAccepted: {
             var options = {
-                'enginePath': enginePathField.text
+                'enginePath': enginePathField.text,
+                'engineSearchDepth': String(engineSearchDepthSpinBox.value),
             };
             backend.save_options(options);
         }
@@ -223,7 +233,8 @@ ApplicationWindow {
     Connections {
         target: backend
         function onOptionsChanged(options) {
-            enginePathField.text = options['enginePath']
+            enginePathField.text = options['enginePath'];
+            engineSearchDepthSpinBox.value = parseInt(options['engineSearchDepth']);
         }
     }
     Connections {

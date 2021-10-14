@@ -69,7 +69,6 @@ class Backend(QObject):
     ------------------
     player_side
     config
-    engine_time_limit
     """
 
     # Qt signals
@@ -99,9 +98,9 @@ class Backend(QObject):
         self.config = configparser.ConfigParser()
         # ConfigParser instance will be empty if the file doesn't exist
         self.config.read([self.config_file])
+        self._set_config_defaults()
         self._engine = None
         self.initialize_engine()
-        self.engine_time_limit = 10.0
         self._thread_pool = QThreadPool()
         # Keep track of the current game's ID so that the engine will know whether it's the same game as before.
         self._game_id = 1
@@ -136,7 +135,11 @@ class Backend(QObject):
             self.engineTurn.emit()
 
     def _get_engine_move(self) -> chess.Move:
-        result = self._engine.play(self._board, chess.engine.Limit(time=self.engine_time_limit), game=self._game_id)
+        result = self._engine.play(
+            self._board,
+            chess.engine.Limit(depth=self.config['OPTIONS'].getint('EngineSearchDepth')),
+            game=self._game_id
+        )
         return result.move
 
     @pyqtSlot(object)
@@ -217,7 +220,7 @@ class Backend(QObject):
         if self._engine:
             self._engine.quit()
         self._engine = None
-        if self.config.has_option('OPTIONS', 'EnginePath'):
+        if self.config.get('OPTIONS', 'EnginePath') != "":
             try:
                 # Use the synchronous wrapper instead of the coroutines to avoid having to deal with an asyncio event
                 # loop in Qt.
@@ -235,19 +238,18 @@ class Backend(QObject):
         """
         # Convert to Python dict
         options_dict = options.toVariant()
-        if not self.config.has_section('OPTIONS'):
-            self.config.add_section('OPTIONS')
         self.config.set('OPTIONS', 'EnginePath', options_dict['enginePath'])
+        self.config.set('OPTIONS', 'EngineSearchDepth', options_dict['engineSearchDepth'])
         with open(self.config_file, 'w') as f:
             self.config.write(f)
         self.initialize_engine()
 
     def set_option_values(self) -> None:
         """Populate the initial dialog values for the options."""
-        engine_path = ""
-        if self.config.has_section('OPTIONS'):
-            engine_path = self.config['OPTIONS'].get('EnginePath', "")
-        options_dict = {'enginePath': engine_path}
+        options_dict = {
+            'enginePath': self.config['OPTIONS'].get('EnginePath'),
+            'engineSearchDepth': int(self.config['OPTIONS'].get('EngineSearchDepth')),
+        }
         self.optionsChanged.emit(options_dict)
 
     @pyqtSlot(str)
@@ -320,6 +322,15 @@ class Backend(QObject):
             self.undoEnabled.emit(self.can_undo_move())
             # Change to player's turn
             self.playerTurn.emit()
+
+    def _set_config_defaults(self) -> None:
+        """Set defaults in one place so that they don't have to be defined in every get call."""
+        if not self.config.has_section('OPTIONS'):
+            self.config.add_section('OPTIONS')
+        if not self.config.has_option('OPTIONS', 'EnginePath'):
+            self.config.set('OPTIONS', 'EnginePath', '')
+        if not self.config.has_option('OPTIONS', 'EngineSearchDepth'):
+            self.config.set('OPTIONS', 'EngineSearchDepth', '20')
 
 
 if __name__ == '__main__':
