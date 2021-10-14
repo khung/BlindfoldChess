@@ -126,7 +126,7 @@ class Backend(QObject):
         try:
             self._board.push_san(move)
         except ValueError:
-            print("not a valid move")
+            self.error.emit("That is not a valid move.")
             return
         self.draw_current_board()
         self._update_board_status()
