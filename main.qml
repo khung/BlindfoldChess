@@ -99,19 +99,40 @@ ApplicationWindow {
 
         RowLayout {
             Layout.fillWidth: true
-            Text {
-                text: "Enter move:"
+            spacing: 20
+            // Player input
+            RowLayout {
+                Label {
+                    text: "Your move:"
+                }
+                TextField {
+                    id: moveTextField
+                    implicitWidth: 100
+                    enabled: false
+                    onAccepted: {
+                        backend.push_player_move(moveTextField.text);
+                        moveTextField.clear();
+                    }
+                }
             }
-
-            TextField {
-                id: moveTextField
-                enabled: false
-                onAccepted: {
-                    backend.push_player_move(moveTextField.text);
-                    moveTextField.clear();
+            // Engine output
+            RowLayout {
+                Label {
+                    text: "Computer move:"
+                }
+                Label {
+                    id: engineMove
+                    text: ""
                 }
             }
         }
+    }
+
+    // Display engine move for only a certain time
+    Timer {
+        id: engineMoveTimer
+        interval: 5000
+        onTriggered: engineMove.text = ""
     }
 
     Dialog {
@@ -260,6 +281,13 @@ ApplicationWindow {
 
             outcomeMessageDialog.text = message;
             outcomeMessageDialog.open();
+        }
+    }
+    Connections {
+        target: backend
+        function onEngineMove(move) {
+            engineMove.text = move;
+            engineMoveTimer.running = true;
         }
     }
 }

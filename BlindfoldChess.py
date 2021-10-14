@@ -74,6 +74,7 @@ class Backend(QObject):
     # Qt signals
     # Indicate that the board has changed
     boardChanged = pyqtSignal(str)
+    engineMove = pyqtSignal(str)
     # Indicate that the options have changed
     optionsChanged = pyqtSignal(QVariant)
     # Indicate whose turn it is
@@ -150,6 +151,8 @@ class Backend(QObject):
 
         :param move: The chess move given by chess.engine.PlayResult.move.
         """
+        # Get the SAN move first as it relies on the board before the move
+        self.engineMove.emit(self._board.san(move))
         self._board.push(move)
         self.draw_current_board()
         self._update_board_status()
