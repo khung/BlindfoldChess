@@ -1,13 +1,21 @@
 import sys
 from typing import Callable
 import configparser
+from tempfile import gettempdir
+import os.path
+import wave
+import json
 
 from PyQt5.QtGui import QGuiApplication
 from PyQt5.QtQml import QQmlApplicationEngine
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QRunnable, QThreadPool, QVariant
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QRunnable, QThreadPool, QVariant, QUrl
+from PyQt5.QtMultimedia import QAudioRecorder, QAudioEncoderSettings, QVideoEncoderSettings
 import chess
 import chess.engine
 import chess.svg
+from vosk import Model, KaldiRecognizer, SetLogLevel
+
+from text_processing import create_grammar_structs, text_to_move, move_to_text
 
 
 class WorkerSignals(QObject):
@@ -64,6 +72,9 @@ class Backend(QObject):
     can_undo_move
     save_game
     load_game
+    start_recording
+    stop_recording
+    is_speech_recognizer_initialized
 
     Instance variables
     ------------------
@@ -74,6 +85,8 @@ class Backend(QObject):
     # Qt signals
     # Indicate that the board has changed
     boardChanged = pyqtSignal(str)
+    # The move and whether to automatically play it
+    playerMove = pyqtSignal(str, bool)
     engineMove = pyqtSignal(str)
     # Indicate that the options have changed
     optionsChanged = pyqtSignal(QVariant)
@@ -86,9 +99,14 @@ class Backend(QObject):
     error = pyqtSignal(str)
     # Indicate whether moves can be undone
     undoEnabled = pyqtSignal(bool)
+    # Indicate that the microphone input widget should be enabled
+    micAvailable = pyqtSignal()
 
     config_file = "options.cfg"
     save_file = "save.fen"
+    temp_file = os.path.join(gettempdir(), "user_move.wav")
+    audio_sample_rate = 44100
+    grammars = create_grammar_structs()
 
     def __init__(self) -> None:
         super().__init__()
@@ -105,6 +123,20 @@ class Backend(QObject):
         self._thread_pool = QThreadPool()
         # Keep track of the current game's ID so that the engine will know whether it's the same game as before.
         self._game_id = 1
+        self._audio_recorder = QAudioRecorder()
+        self._audio_recorder.setAudioInput(self._audio_recorder.audioInput())
+        self._audio_recorder.setOutputLocation(QUrl.fromLocalFile(self.temp_file))
+        # Need to set audio recording to use 16khz 16-bit mono PCM
+        audio_settings = QAudioEncoderSettings()
+        audio_settings.setCodec('audio/pcm')
+        audio_settings.setChannelCount(1)
+        audio_settings.setSampleRate(self.audio_sample_rate)
+        self._audio_recorder.setEncodingSettings(audio_settings, QVideoEncoderSettings(), 'audio/x-wav')
+        self._speech_recognizer = None
+        # Initialize speech recognizer in a separate thread to prevent blocking of the GUI.
+        worker = Worker(self._init_speech_recognizer)
+        worker.signals.result.connect(self._assign_speech_recognizer)
+        self._thread_pool.start(worker)
 
     @pyqtSlot()
     def engine_play(self) -> None:
@@ -207,9 +239,13 @@ class Backend(QObject):
 
     @pyqtSlot()
     def handle_exit(self) -> None:
-        """Clean up by stopping the engine. Connect to QGuiApplication.aboutToQuit signal to handle exits correctly."""
+        """Clean up before exiting. Connect to QGuiApplication.aboutToQuit signal to handle exits correctly."""
+        # Stop the chess engine
         if self._engine:
             self._engine.quit()
+        # Delete temporary file
+        if os.path.exists(self.temp_file):
+            os.remove(self.temp_file)
 
     def is_engine_initialized(self) -> bool:
         """Check whether the engine has been initialized."""
@@ -243,6 +279,7 @@ class Backend(QObject):
         options_dict = options.toVariant()
         self.config.set('OPTIONS', 'EnginePath', options_dict['enginePath'])
         self.config.set('OPTIONS', 'EngineSearchDepth', options_dict['engineSearchDepth'])
+        self.config.set('OPTIONS', 'PlaySpokenMove', options_dict['playSpokenMove'])
         with open(self.config_file, 'w') as f:
             self.config.write(f)
         self.initialize_engine()
@@ -253,6 +290,7 @@ class Backend(QObject):
         options_dict = {
             'enginePath': self.config['OPTIONS'].get('EnginePath'),
             'engineSearchDepth': int(self.config['OPTIONS'].get('EngineSearchDepth')),
+            'playSpokenMove': self.config['OPTIONS'].get('PlaySpokenMove') == 'true'
         }
         self.optionsChanged.emit(options_dict)
 
@@ -337,6 +375,62 @@ class Backend(QObject):
             self.config.set('OPTIONS', 'EnginePath', '')
         if not self.config.has_option('OPTIONS', 'EngineSearchDepth'):
             self.config.set('OPTIONS', 'EngineSearchDepth', '20')
+        if not self.config.has_option('OPTIONS', 'PlaySpokenMove'):
+            self.config.set('OPTIONS', 'PlaySpokenMove', 'True')
+
+    @pyqtSlot()
+    def start_recording(self) -> None:
+        """Start recording microphone input for player's move."""
+        if not self.is_speech_recognizer_initialized():
+            return
+        self._audio_recorder.record()
+
+    @pyqtSlot()
+    def stop_recording(self) -> None:
+        """Stop recording the microphone input and parse recorded move."""
+        self._audio_recorder.stop()
+        # Stop is synchronous so media is finalized already
+        waveform = wave.open(self.temp_file, 'rb')
+        # Parse every X frames for words
+        while True:
+            data = waveform.readframes(4000)
+            if len(data) == 0:
+                break
+            self._speech_recognizer.AcceptWaveform(data)
+        # FinalResult is returned as a string even though it's a JSON dictionary
+        result = json.loads(self._speech_recognizer.FinalResult())
+        move = text_to_move(self.grammars, result['text'])
+        self.playerMove.emit(move, self.config['OPTIONS'].getboolean('PlaySpokenMove'))
+
+    def _init_speech_recognizer(self) -> KaldiRecognizer:
+        # Default log level 0 shows info messages
+        SetLogLevel(-1)
+        model = Model("model")
+        # Limit the possible vocabulary to chess terms and the UNK token. May not be the best way to do this, but we
+        # can use the provided model as-is.
+        grammar = '["' \
+                  + 'pawn bishop knight rook queen king ' \
+                  + 'a b c d e f g h ' \
+                  + 'one two three four five six seven eight ' \
+                  + 'to promote check checkmate castle side ' \
+                  + '", "[unk]"]'
+        speech_recognizer = KaldiRecognizer(model, self.audio_sample_rate, grammar)
+        # Show result metadata when returning results for debugging purposes
+        speech_recognizer.SetWords(True)
+        return speech_recognizer
+
+    @pyqtSlot(object)
+    def _assign_speech_recognizer(self, recognizer: KaldiRecognizer):
+        self._speech_recognizer = recognizer
+        # Microphone input is now usable
+        self.micAvailable.emit()
+
+    def is_speech_recognizer_initialized(self) -> bool:
+        """Check whether the speech recognizer has been initialized."""
+        if self._speech_recognizer is None:
+            self.error.emit("Speech recognizer has not finished initializing.")
+            return False
+        return True
 
 
 if __name__ == '__main__':

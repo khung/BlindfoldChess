@@ -105,13 +105,42 @@ ApplicationWindow {
                 Label {
                     text: "Your move:"
                 }
+                Button {
+                    id: micButton
+                    // Make it square
+                    Layout.preferredWidth: parent.height
+                    // Wait for speech recognizer to be initialized first
+                    enabled: false
+                    property bool available: false
+                    state: "off"
+                    states: [
+                        State {
+                            name: "on"
+                            PropertyChanges { target: micButton; icon.source: "assets/mic_on.png" }
+                        },
+                        State {
+                            name: "off"
+                            PropertyChanges { target: micButton; icon.source: "assets/mic_off.png" }
+                        }
+                    ]
+                    onClicked: {
+                        if (micButton.state == "off") {
+                            micButton.state = "on";
+                            backend.start_recording();
+                        }
+                        else {
+                            micButton.state = "off";
+                            backend.stop_recording();
+                        }
+                    }
+                }
                 TextField {
                     id: moveTextField
                     implicitWidth: 100
                     enabled: false
                     onAccepted: {
                         backend.push_player_move(moveTextField.text);
-                        moveTextField.clear();
+                        playerMoveTimer.running = true;
                     }
                 }
             }
@@ -126,6 +155,13 @@ ApplicationWindow {
                 }
             }
         }
+    }
+
+    // Display player move for only a certain time
+    Timer {
+        id: playerMoveTimer
+        interval: 5000
+        onTriggered: moveTextField.clear()
     }
 
     // Display engine move for only a certain time
@@ -181,18 +217,24 @@ ApplicationWindow {
         GridLayout {
             columns: 2
             // EnginePath
-            Label { text: "Engine Path" }
+            Label { text: "Engine path" }
             TextField {
-                id: enginePathField;
-                Layout.fillWidth: true;
+                id: enginePathField
+                Layout.fillWidth: true
             }
             // EngineSearchDepth
-            Label { text: "Engine Search Depth" }
+            Label { text: "Engine search depth" }
             SpinBox {
-                id: engineSearchDepthSpinBox;
-                Layout.fillWidth: true;
+                id: engineSearchDepthSpinBox
+                Layout.fillWidth: true
                 from: 5
                 to: 30
+            }
+            // PlaySpokenMove
+            Label { text: "Automatically play spoken move" }
+            CheckBox {
+                id: playSpokenMoveCheckBox
+                Layout.fillWidth: true
             }
         }
         standardButtons: Dialog.Save | Dialog.Cancel
@@ -200,6 +242,7 @@ ApplicationWindow {
             var options = {
                 'enginePath': enginePathField.text,
                 'engineSearchDepth': String(engineSearchDepthSpinBox.value),
+                'playSpokenMove': String(playSpokenMoveCheckBox.checked),
             };
             backend.save_options(options);
         }
@@ -231,7 +274,10 @@ ApplicationWindow {
             loadAction.enabled = true;
             saveAction.enabled = true;
 
+            moveTextField.clear();
             moveTextField.enabled = true;
+            if (micButton.available)
+                micButton.enabled = true;
             busyIndicator.running = false;
         }
     }
@@ -244,6 +290,8 @@ ApplicationWindow {
             saveAction.enabled = false;
 
             moveTextField.enabled = false;
+            engineMove.text = "";
+            micButton.enabled = false;
             busyIndicator.running = true;
         }
     }
@@ -259,7 +307,8 @@ ApplicationWindow {
         target: backend
         function onOptionsChanged(options) {
             enginePathField.text = options['enginePath'];
-            engineSearchDepthSpinBox.value = parseInt(options['engineSearchDepth']);
+            engineSearchDepthSpinBox.value = options['engineSearchDepth'];
+            playSpokenMoveCheckBox.checked = options['playSpokenMove'];
         }
     }
     Connections {
@@ -285,9 +334,27 @@ ApplicationWindow {
     }
     Connections {
         target: backend
+        function onPlayerMove(move, playMove) {
+            moveTextField.text = move;
+            moveTextField.focus = true;
+            if (playMove) {
+                moveTextField.accepted();
+            }
+        }
+    }
+    Connections {
+        target: backend
         function onEngineMove(move) {
             engineMove.text = move;
             engineMoveTimer.running = true;
+        }
+    }
+    Connections {
+        target: backend
+        function onMicAvailable() {
+            micButton.available = true;
+            if (moveTextField.enabled)
+                micButton.enabled = true;
         }
     }
 }
