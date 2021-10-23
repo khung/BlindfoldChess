@@ -5,6 +5,7 @@ from tempfile import gettempdir
 import os.path
 import wave
 import json
+import queue
 
 from PyQt5.QtGui import QGuiApplication
 from PyQt5.QtQml import QQmlApplicationEngine
@@ -14,6 +15,7 @@ import chess
 import chess.engine
 import chess.svg
 from vosk import Model, KaldiRecognizer, SetLogLevel
+import pyttsx3
 
 from text_processing import create_grammar_structs, text_to_move, move_to_text
 
@@ -75,6 +77,7 @@ class Backend(QObject):
     start_recording
     stop_recording
     is_speech_recognizer_initialized
+    say_text
 
     Instance variables
     ------------------
@@ -137,6 +140,10 @@ class Backend(QObject):
         worker = Worker(self._init_speech_recognizer)
         worker.signals.result.connect(self._assign_speech_recognizer)
         self._thread_pool.start(worker)
+        # Use producer/consumer model to run a separate event loop for TTS
+        self._tts_queue = queue.SimpleQueue()
+        self._tts_engine = None
+        self._start_tts_engine()
 
     @pyqtSlot()
     def engine_play(self) -> None:
@@ -162,7 +169,10 @@ class Backend(QObject):
             self.error.emit("That is not a valid move.")
             return
         self.draw_current_board()
-        self._update_board_status()
+        self._update_board_status(
+            check_called=self._move_includes_check(move),
+            checkmate_called=self._move_includes_checkmate(move)
+        )
         # Only continue game if it is not terminated
         if self._board.outcome() is None:
             self.engineTurn.emit()
@@ -184,7 +194,9 @@ class Backend(QObject):
         :param move: The chess move given by chess.engine.PlayResult.move.
         """
         # Get the SAN move first as it relies on the board before the move
-        self.engineMove.emit(self._board.san(move))
+        san_move = self._board.san(move)
+        self.engineMove.emit(san_move)
+        self.say_text(move_to_text(self.grammars, san_move))
         self._board.push(move)
         self.draw_current_board()
         self._update_board_status()
@@ -201,12 +213,20 @@ class Backend(QObject):
     def _create_svg_uri(svg_data: str):
         return "data:image/svg+xml;utf8," + svg_data
 
-    def _update_board_status(self) -> None:
+    def _update_board_status(self, check_called: bool = False, checkmate_called: bool = False) -> None:
         outcome = self._board.outcome()
         if outcome is not None:
             self.gameOver.emit(self._get_outcome_message(outcome))
-        elif self._board.is_check():
-            print("in check")
+        # Say something when check state is different from what's passed in. Only need to check on player's move since
+        # the engine's move will always include the appropriate state.
+        if check_called and not self._board.is_check():
+            self.say_text("My king is not in check.")
+        if not check_called and self._board.is_check():
+            self.say_text("My king is in check.")
+        if checkmate_called and not self._board.is_checkmate():
+            self.say_text("My king is not checkmated.")
+        if not checkmate_called and self._board.is_checkmate():
+            self.say_text("My king is checkmated.")
 
     @staticmethod
     def _get_outcome_message(outcome: chess.Outcome) -> str:
@@ -420,7 +440,7 @@ class Backend(QObject):
         return speech_recognizer
 
     @pyqtSlot(object)
-    def _assign_speech_recognizer(self, recognizer: KaldiRecognizer):
+    def _assign_speech_recognizer(self, recognizer: KaldiRecognizer) -> None:
         self._speech_recognizer = recognizer
         # Microphone input is now usable
         self.micAvailable.emit()
@@ -431,6 +451,37 @@ class Backend(QObject):
             self.error.emit("Speech recognizer has not finished initializing.")
             return False
         return True
+
+    def say_text(self, text: str) -> None:
+        """
+        Use the TTS engine to say a block of text.
+
+        :param text: The text to convert to speech.
+        """
+        self._tts_queue.put(text)
+
+    def _start_tts_engine(self) -> None:
+        self._tts_engine = pyttsx3.init()
+        # Set word rate to 150 words/sec (on the slower end of normal)
+        self._tts_engine.setProperty('rate', 150)
+        # Launch TTS event loop in a new thread
+        worker = Worker(self._tts_event_loop)
+        self._thread_pool.start(worker)
+
+    def _tts_event_loop(self) -> None:
+        while True:
+            # Blocks until an item is available
+            text = self._tts_queue.get()
+            self._tts_engine.say(text)
+            self._tts_engine.runAndWait()
+
+    @staticmethod
+    def _move_includes_check(move: str) -> bool:
+        return move.endswith('+')
+
+    @staticmethod
+    def _move_includes_checkmate(move: str) -> bool:
+        return move.endswith('#')
 
 
 if __name__ == '__main__':

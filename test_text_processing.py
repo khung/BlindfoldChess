@@ -79,3 +79,76 @@ class TestTextProcessing:
         text = "pawn pawn to c three"
         reference_output = "c3"
         assert tp.text_to_move(grammars, text) == reference_output
+
+    @pytest.mark.parametrize(
+        "test_input,expected_position",
+        [("a1", "A one"), ("b2", "b two"), ("c3", "c three"), ("d4", "d four"),
+         ("e5", "e five"), ("f6", "f six"), ("g7", "g seven"), ("h8", "h eight")]
+    )
+    def test_move_to_text_basic(self, grammars, test_input, expected_position):
+        expected = "pawn to " + expected_position
+        assert tp.move_to_text(grammars, test_input) == expected
+
+    def test_move_to_text_row(self, grammars):
+        text = "R1b2"
+        reference_output = "rook one to b two"
+        assert tp.move_to_text(grammars, text) == reference_output
+
+    def test_move_to_text_column(self, grammars):
+        text = "Rab2"
+        reference_output = "rook A to b two"
+        assert tp.move_to_text(grammars, text) == reference_output
+
+    @pytest.mark.parametrize(
+        "test_input_piece,expected_text",
+        [("", "pawn"), ("B", "bishop"), ("N", "knight"), ("R", "rook"), ("Q", "queen"), ("K", "king")]
+    )
+    def test_move_to_text_pieces(self, grammars, test_input_piece, expected_text):
+        test_input = test_input_piece + "a1"
+        expected = expected_text + " to A one"
+        assert tp.move_to_text(grammars, test_input) == expected
+
+    def test_move_to_text_check(self, grammars):
+        text = "Bf7+"
+        reference_output = "bishop to f seven, check"
+        assert tp.move_to_text(grammars, text) == reference_output
+
+    def test_move_to_text_checkmate(self, grammars):
+        text = "Bf7#"
+        reference_output = "bishop to f seven, checkmate"
+        assert tp.move_to_text(grammars, text) == reference_output
+
+    def test_move_to_text_en_passant(self, grammars):
+        text = "a6b7"
+        reference_output = "pawn A six to b seven"
+        assert tp.move_to_text(grammars, text) == reference_output
+
+    def test_move_to_text_promotion(self, grammars):
+        text = "a7a8=Q"
+        reference_output = "pawn A seven to A eight, promote to queen"
+        assert tp.move_to_text(grammars, text) == reference_output
+
+    def test_move_to_text_complex(self, grammars):
+        text = "a7a8=Q#"
+        reference_output = "pawn A seven to A eight, promote to queen, checkmate"
+        assert tp.move_to_text(grammars, text) == reference_output
+
+    def test_move_to_text_castle_kingside(self, grammars):
+        text = "O-O"
+        reference_output = "castle king side"
+        assert tp.move_to_text(grammars, text) == reference_output
+
+    def test_move_to_text_castle_queenside(self, grammars):
+        text = "O-O-O"
+        reference_output = "castle queen side"
+        assert tp.move_to_text(grammars, text) == reference_output
+
+    def test_move_to_text_capture(self, grammars):
+        text = "Rxd1"
+        reference_output = "rook to d one"
+        assert tp.move_to_text(grammars, text) == reference_output
+
+    def test_move_to_text_non_move(self, grammars):
+        text = "aaa"
+        with pytest.raises(ValueError):
+            tp.move_to_text(grammars, text)
