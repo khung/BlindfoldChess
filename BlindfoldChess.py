@@ -144,6 +144,7 @@ class Backend(QObject):
         self._tts_queue = queue.SimpleQueue()
         self._tts_engine = None
         self._start_tts_engine()
+        self._stop_work = False
 
     @pyqtSlot()
     def engine_play(self) -> None:
@@ -266,6 +267,8 @@ class Backend(QObject):
         # Delete temporary file
         if os.path.exists(self.temp_file):
             os.remove(self.temp_file)
+        # Stop worker threads
+        self._stop_work = True
 
     def is_engine_initialized(self) -> bool:
         """Check whether the engine has been initialized."""
@@ -469,11 +472,15 @@ class Backend(QObject):
         self._thread_pool.start(worker)
 
     def _tts_event_loop(self) -> None:
-        while True:
-            # Blocks until an item is available
-            text = self._tts_queue.get()
-            self._tts_engine.say(text)
-            self._tts_engine.runAndWait()
+        while not self._stop_work:
+            # Blocks for 100 ms waiting for an available item
+            try:
+                text = self._tts_queue.get(timeout=.1)
+            except queue.Empty:
+                text = ""
+            if text != "":
+                self._tts_engine.say(text)
+                self._tts_engine.runAndWait()
 
     @staticmethod
     def _move_includes_check(move: str) -> bool:
