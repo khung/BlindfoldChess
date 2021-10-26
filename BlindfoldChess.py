@@ -222,7 +222,11 @@ class Backend(QObject):
     def _update_board_status(self, check_called: bool = False, checkmate_called: bool = False) -> None:
         outcome = self._board.outcome()
         if outcome is not None:
-            self.gameOver.emit(self._get_outcome_message(outcome))
+            try:
+                outcome_message = self._get_outcome_message(outcome)
+            except ValueError as err:
+                outcome_message = "Error: " + str(err)
+            self.gameOver.emit(outcome_message)
         # Say something when check state is different from what's passed in. Only need to check on player's move since
         # the engine's move will always include the appropriate state.
         if check_called and not self._board.is_check():
