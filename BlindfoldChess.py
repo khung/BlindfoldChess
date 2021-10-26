@@ -10,7 +10,7 @@ import queue
 from PyQt5.QtGui import QGuiApplication
 from PyQt5.QtQml import QQmlApplicationEngine
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QRunnable, QThreadPool, QVariant, QUrl
-from PyQt5.QtMultimedia import QAudioRecorder, QAudioEncoderSettings, QVideoEncoderSettings
+from PyQt5.QtMultimedia import QAudioRecorder, QAudioEncoderSettings, QVideoEncoderSettings, QSound
 import chess
 import chess.engine
 import chess.svg
@@ -104,6 +104,8 @@ class Backend(QObject):
     undoEnabled = pyqtSignal(bool)
     # Indicate that the microphone input widget should be enabled
     micAvailable = pyqtSignal()
+    # Indicate that a sound effect should be played
+    playSoundEffect = pyqtSignal()
 
     config_file = "options.cfg"
     save_file = "save.fen"
@@ -115,6 +117,7 @@ class Backend(QObject):
         super().__init__()
         # Connect signals
         self.engineTurn.connect(self.engine_play)
+        self.playSoundEffect.connect(self._play_sound)
         self.player_side = chess.WHITE
         self._board = chess.Board()
         self.config = configparser.ConfigParser()
@@ -145,6 +148,8 @@ class Backend(QObject):
         self._tts_engine = None
         self._start_tts_engine()
         self._stop_work = False
+        # Create sound effect to play
+        self._chess_move_sound = QSound("assets/chessmove.wav")
 
     @pyqtSlot()
     def engine_play(self) -> None:
@@ -170,6 +175,7 @@ class Backend(QObject):
             self.error.emit("That is not a valid move.")
             return
         self.draw_current_board()
+        self.playSoundEffect.emit()
         self._update_board_status(
             check_called=self._move_includes_check(move),
             checkmate_called=self._move_includes_checkmate(move)
@@ -202,9 +208,11 @@ class Backend(QObject):
         except ValueError as err:
             text = ""
             self.error.emit(f"TTS error: {err}")
-        self.say_text(text)
         self._board.push(move)
         self.draw_current_board()
+        # Make sure that sound effect is played before TTS, otherwise the audio will overlap.
+        self.playSoundEffect.emit()
+        self.say_text(text)
         self._update_board_status()
         self.undoEnabled.emit(self.can_undo_move())
         # Only continue game if it is not terminated
@@ -501,6 +509,11 @@ class Backend(QObject):
     @staticmethod
     def _move_includes_checkmate(move: str) -> bool:
         return move.endswith('#')
+
+    @pyqtSlot()
+    def _play_sound(self) -> None:
+        # Ideally, this would be part of the QML code, but QML on PyQt seems to have issues importing QtMultimedia.
+        self._chess_move_sound.play()
 
 
 if __name__ == '__main__':
