@@ -197,7 +197,12 @@ class Backend(QObject):
         # Get the SAN move first as it relies on the board before the move
         san_move = self._board.san(move)
         self.engineMove.emit(san_move)
-        self.say_text(move_to_text(self.grammars, san_move))
+        try:
+            text = move_to_text(self.grammars, san_move)
+        except ValueError as err:
+            text = ""
+            self.error.emit(f"TTS error: {err}")
+        self.say_text(text)
         self._board.push(move)
         self.draw_current_board()
         self._update_board_status()
@@ -422,7 +427,10 @@ class Backend(QObject):
             self._speech_recognizer.AcceptWaveform(data)
         # FinalResult is returned as a string even though it's a JSON dictionary
         result = json.loads(self._speech_recognizer.FinalResult())
-        move = text_to_move(self.grammars, result['text'])
+        try:
+            move = text_to_move(self.grammars, result['text'])
+        except ValueError as err:
+            move = "ERROR"
         self.playerMove.emit(move, self.config['OPTIONS'].getboolean('PlaySpokenMove'))
 
     def _init_speech_recognizer(self) -> KaldiRecognizer:
