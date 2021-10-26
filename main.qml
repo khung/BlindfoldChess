@@ -65,7 +65,7 @@ ApplicationWindow {
         Image {
             id: boardImage
             Layout.alignment: Qt.AlignHCenter
-            state: "visible"
+            state: "hidden"
 
             states: [
                 State {
