@@ -52,7 +52,11 @@ class Worker(QRunnable):
     def run(self) -> None:
         """Run the specified function and return the result as a Qt signal."""
         result = self.fn(*self.args, **self.kwargs)
-        self.signals.result.emit(result)
+        # If the result is None, we assume that the program is exiting so we don't try to emit any signals in case
+        # the signal C++ class has already been deleted by Qt. If this is not done, a RuntimeError exception may be
+        # raised: "wrapped C/C++ object of type WorkerSignals has been deleted".
+        if result is not None:
+            self.signals.result.emit(result)
 
 
 class Backend(QObject):
