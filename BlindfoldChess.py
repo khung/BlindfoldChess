@@ -134,7 +134,16 @@ class Backend(QObject):
         self._audio_recorder.setOutputLocation(QUrl.fromLocalFile(self.temp_file))
         # Need to set audio recording to use 16khz 16-bit mono PCM
         audio_settings = QAudioEncoderSettings()
-        audio_settings.setCodec('audio/pcm')
+        supported_codecs = self._audio_recorder.supportedAudioCodecs()
+        if 'audio/pcm' in supported_codecs:
+            # Windows
+            codec = 'audio/pcm'
+        elif 'audio/x-raw' in supported_codecs:
+            # Linux (GStreamer backend)
+            codec = 'audio/x-raw'
+        else:
+            codec = None
+        audio_settings.setCodec(codec)
         audio_settings.setChannelCount(1)
         audio_settings.setSampleRate(self.audio_sample_rate)
         self._audio_recorder.setEncodingSettings(audio_settings, QVideoEncoderSettings(), 'audio/x-wav')
