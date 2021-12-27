@@ -250,14 +250,15 @@ class Backend(QObject):
             self.gameOver.emit(outcome_message)
         # Say something when check state is different from what's passed in. Only need to check on player's move since
         # the engine's move will always include the appropriate state.
-        if check_called and not self._board.is_check():
-            self.say_text("My king is not in check.")
-        if not check_called and self._board.is_check():
-            self.say_text("My king is in check.")
-        if checkmate_called and not self._board.is_checkmate():
-            self.say_text("My king is not checkmated.")
-        if not checkmate_called and self._board.is_checkmate():
-            self.say_text("My king is checkmated.")
+        if self._board.turn != self.player_side:
+            if check_called and not self._board.is_check():
+                self.say_text("My king is not in check.")
+            if not check_called and self._board.is_check():
+                self.say_text("My king is in check.")
+            if checkmate_called and not self._board.is_checkmate():
+                self.say_text("My king is not checkmated.")
+            if not checkmate_called and self._board.is_checkmate():
+                self.say_text("My king is checkmated.")
 
     @staticmethod
     def _get_outcome_message(outcome: chess.Outcome) -> str:
