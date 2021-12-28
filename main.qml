@@ -77,12 +77,6 @@ ApplicationWindow {
                     PropertyChanges { target: boardImage; opacity: 100 }
                 }
             ]
-
-            BusyIndicator {
-                id: busyIndicator
-                anchors.centerIn: parent
-                running: false
-            }
         }
 
         Button {
@@ -143,6 +137,10 @@ ApplicationWindow {
                         playerMoveTimer.running = true;
                     }
                 }
+            }
+            BusyIndicator {
+                id: busyIndicator
+                running: false
             }
             // Engine output
             RowLayout {
