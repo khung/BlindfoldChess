@@ -344,7 +344,7 @@ ApplicationWindow {
         target: backend
         function onEngineMove(move) {
             engineMove.text = move;
-            engineMoveTimer.running = true;
+            engineMoveTimer.restart();
         }
     }
     Connections {
