@@ -5,6 +5,8 @@ able to see the board. Chess moves can be made through speaking or typing.
 
 ## Demo
 
+Turn on the sound to hear the spoken chess moves.
+
 https://user-images.githubusercontent.com/963577/147703732-d88231d6-1a0e-464b-a31c-8d4e71169688.mp4
 
 ## Prerequisites
