@@ -3,6 +3,10 @@
 Blindfold Chess is a chess game that allows the user to play without being
 able to see the board. Chess moves can be made through speaking or typing.
 
+## Demo
+
+https://user-images.githubusercontent.com/963577/147703732-d88231d6-1a0e-464b-a31c-8d4e71169688.mp4
+
 ## Prerequisites
 * Python 3.7+
 * Windows, Linux, macOS
